@@ -2,6 +2,6 @@
 data
 raw_data
 
-generated_*
+generated_*/
 
 *.pth
