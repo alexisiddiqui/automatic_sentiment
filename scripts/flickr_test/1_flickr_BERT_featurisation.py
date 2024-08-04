@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import time
 import re
+import os
 from transformers import DistilBertTokenizer, DistilBertModel
 
 print("CUDA Available:", torch.cuda.is_available())
@@ -11,6 +12,7 @@ print("MPS Available:", torch.backends.mps.is_available())
 
 # Use MPS if available, otherwise fallback to CPU
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 print("Loading DistilBERT model and tokenizer...")
@@ -124,7 +126,7 @@ def process_csv(input_file, output_file):
     print(f"Results saved to {output_file}")
 
 # Usage
-input_file = "/Users/alexi/Documents/ArtxBiology2024/automatic_sentiment/data/flickr30k_images/results.csv"
+input_file = os.getcwd()+"/data/flickr30k_images/results.csv"
 output_file = input_file.replace('.csv', '_distilbert_embeddings.csv')
 
 print("Starting CSV processing...")

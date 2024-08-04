@@ -8,6 +8,7 @@ from torchvision.utils import save_image
 import numpy as np
 from transformers import DistilBertTokenizer, DistilBertForMaskedLM
 import torch.nn.functional as F
+import time
 
 def evaluate_and_save_samples(model, device, epoch, output_dir, num_samples=10):
     model.eval()
@@ -104,6 +105,8 @@ def train_autoencoder(model: ImageEmbeddingVAE,
     
     steps_per_epoch = len(train_loader)
     
+    start_time = time.time()  # Start time
+
     for epoch in range(num_epochs):
         print(f"\nEpoch {epoch+1}/{num_epochs}")
         model.train()
@@ -121,14 +124,14 @@ def train_autoencoder(model: ImageEmbeddingVAE,
             optimizer.zero_grad()
             recon_batch, latent, mu, logvar = model(batch)
             
-            image_loss = F.mse_loss(recon_batch.image, batch.image, reduction='sum')
+            image_loss = F.mse_loss(recon_batch.image, batch.image, reduction='mean')
             
-            embedding_scaling = 224 * 224 
-            embedding_loss = F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1))
+            embedding_scaling = 1
+            embedding_loss = embedding_scaling * F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1), reduction='mean')
             
-            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
             
-            total_loss = image_loss/embedding_scaling + embedding_loss + kl_weight * kl_loss
+            total_loss = image_loss + embedding_loss + kl_weight * kl_loss
             
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -155,10 +158,10 @@ def train_autoencoder(model: ImageEmbeddingVAE,
                 )
                 recon_batch, latent, mu, logvar = model(batch)
                 
-                image_loss = F.mse_loss(recon_batch.image, batch.image, reduction='sum')
-                embedding_loss =  F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1))
-                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-                total_loss = image_loss/embedding_scaling + embedding_loss + kl_weight * kl_loss
+                image_loss = F.mse_loss(recon_batch.image, batch.image, reduction='mean')
+                embedding_loss =  embedding_scaling* F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1), reduction='mean')
+                kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+                total_loss = image_loss + embedding_loss + kl_weight * kl_loss
                 val_loss += total_loss.item()
         
         val_loss /= len(val_loader.dataset)
@@ -174,19 +177,32 @@ def train_autoencoder(model: ImageEmbeddingVAE,
         evaluate_and_save_samples(model, device, epoch + 1, output_dir)
         evaluate_and_save_samples_noise(model, device, epoch + 1, output_dir+"_noisy", val_loader)
     
+    end_time = time.time()  # End time  
+
+    print(f"Total time taken for training: {end_time - start_time} seconds")
+
+    # print in minutes
+    print(f"Total time taken for training: {(end_time - start_time)/60} minutes")
+
+
     print('Training completed.')
+
+
+
+
+
 
 if __name__ == "__main__":
     print("Starting main program")
-    image_dir = "/Users/alexi/Documents/ArtxBiology2024/automatic_sentiment/data/flickr30k_images/flickr30k_images"
+    image_dir = os.getcwd()+"/data/flickr30k_images/flickr30k_images"
     
     print("Creating data loaders...")
-    train_loader, val_loader = create_dataloaders(image_dir, batch_size=32, num_workers=4)
+    train_loader, val_loader = create_dataloaders(image_dir, batch_size=500, num_workers=20)
     
     print("Initializing model...")
     model = ImageEmbeddingVAE(
         image_latent_dim=256,
-        text_latent_dim=128,
+        text_latent_dim=256,
         combined_latent_dim=256,
         text_embedding_dim=768 # Assuming DistilBERT embeddings
     )
@@ -198,5 +214,5 @@ if __name__ == "__main__":
         val_loader=val_loader,
         num_epochs=20,
         learning_rate=1e-3,
-        device='mps' if torch.backends.mps.is_available() else 'cpu'
+        device='cuda'
     )

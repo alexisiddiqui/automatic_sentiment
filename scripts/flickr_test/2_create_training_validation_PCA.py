@@ -5,8 +5,8 @@ from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
-
-def create_train_val_split(csv_path, n_clusters=1000, val_size=0.2, random_state=42):
+import os
+def create_train_val_split(csv_path, n_clusters=500, val_size=0.2, random_state=42):
     # Load the data
     df = pd.read_csv(csv_path, header=0)
     
@@ -56,12 +56,13 @@ def create_train_val_split(csv_path, n_clusters=1000, val_size=0.2, random_state
     return train_df, val_df
 
 # Usage
-csv_path = "/Users/alexi/Documents/ArtxBiology2024/automatic_sentiment/data/flickr30k_images/results_distilbert_embeddings.csv"
+print("Starting the script...")
+csv_path = os.getcwd() + "/data/flickr30k_images/results_distilbert_embeddings.csv"
 train_df, val_df = create_train_val_split(csv_path)
 
-# Save the split datasets
-train_df.to_csv('/Users/alexi/Documents/ArtxBiology2024/automatic_sentiment/data/flickr30k_images/train_data.csv', index=False)
-val_df.to_csv('/Users/alexi/Documents/ArtxBiology2024/automatic_sentiment/data/flickr30k_images/val_data.csv', index=False)
+print("Saving the split datasets...")
+train_df.to_csv(os.getcwd() + '/data/flickr30k_images/train_data.csv', index=False)
+val_df.to_csv(os.getcwd() + '/data/flickr30k_images/val_data.csv', index=False)
 
 print(f"Training set size: {len(train_df)}")
 print(f"Validation set size: {len(val_df)}")

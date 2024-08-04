@@ -86,6 +86,10 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 class ImageEncoder(nn.Module):
     def __init__(self, latent_dim):
         super(ImageEncoder, self).__init__()
@@ -93,11 +97,12 @@ class ImageEncoder(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1)
         self.fc = nn.Linear(64 * 28 * 28, latent_dim)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        x = self.dropout(F.relu(self.conv1(x)))
+        x = self.dropout(F.relu(self.conv2(x)))
+        x = self.dropout(F.relu(self.conv3(x)))
         x = x.view(x.size(0), -1)
         return self.fc(x)
 
@@ -106,19 +111,21 @@ class TextEncoder(nn.Module):
         super(TextEncoder, self).__init__()
         self.fc1 = nn.Linear(input_dim, 512)
         self.fc2 = nn.Linear(512, latent_dim)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
+        x = self.dropout(F.relu(self.fc1(x)))
         return self.fc2(x)
 
 class Combiner(nn.Module):
     def __init__(self, image_latent_dim, text_latent_dim, combined_latent_dim):
         super(Combiner, self).__init__()
         self.fc = nn.Linear(image_latent_dim + text_latent_dim, combined_latent_dim * 2)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, image_z, text_z):
         combined = torch.cat([image_z, text_z], dim=1)
-        return self.fc(combined)
+        return self.dropout(self.fc(combined))
 
 class ImageDecoder(nn.Module):
     def __init__(self, latent_dim):
@@ -127,12 +134,13 @@ class ImageDecoder(nn.Module):
         self.deconv1 = nn.ConvTranspose2d(64, 64, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.deconv2 = nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1)
         self.deconv3 = nn.ConvTranspose2d(32, 3, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
-        x = self.fc(x)
+        x = self.dropout(self.fc(x))
         x = x.view(x.size(0), 64, 28, 28)
-        x = F.relu(self.deconv1(x))
-        x = F.relu(self.deconv2(x))
+        x = self.dropout(F.relu(self.deconv1(x)))
+        x = self.dropout(F.relu(self.deconv2(x)))
         x = torch.tanh(self.deconv3(x))
         return x
 
@@ -141,12 +149,12 @@ class TextDecoder(nn.Module):
         super(TextDecoder, self).__init__()
         self.fc1 = nn.Linear(latent_dim, 512)
         self.fc2 = nn.Linear(512, output_dim)
-
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
+        x = self.dropout(F.relu(self.fc1(x)))
         return self.fc2(x)
-    
+
 class ImageEmbeddingVAE(nn.Module):
     def __init__(self, image_latent_dim, text_latent_dim, combined_latent_dim, text_embedding_dim):
         super(ImageEmbeddingVAE, self).__init__()
