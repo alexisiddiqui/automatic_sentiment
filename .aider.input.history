@@ -1,0 +1,96 @@
+
+# 2024-09-08 17:12:52.916011
++/add sentiment_AE/* 
+
+# 2024-09-08 17:13:24.686396
++/clear
+
+# 2024-09-08 17:13:41.420183
++/add scripts/flickr_test/*
+
+# 2024-09-08 17:14:44.007134
++/ask what kind of modell is being used here
+
+# 2024-09-08 17:17:35.292610
++/clear
+
+# 2024-09-08 17:17:40.125235
++/add scripts/flickr_test/*
+
+# 2024-09-08 17:17:53.758240
++/ask what kind of modell is being used here
+
+# 2024-09-08 17:24:36.375064
++/model
+
+# 2024-09-08 17:24:48.681595
++list-models
+
+# 2024-09-08 17:24:51.650885
++/list-models
+
+# 2024-09-08 17:25:11.414756
++/model gemini-1.5-pro
+
+# 2024-09-08 17:49:41.603503
++/add scripts/flickr_test/*
+
+# 2024-09-08 17:49:48.166304
++/ask what is this mdoel doing
+
+# 2024-09-08 19:05:21.771550
++.add scripts/flickr_test/*.py
+
+# 2024-09-08 19:05:32.393433
++/add scripts/flickr_test/*.py
+
+# 2024-09-08 19:05:48.060358
++/ask what is this model doing?
+
+# 2024-09-09 00:20:42.761655
++/add scripts/flickr_test/3_test_train.py
+
+# 2024-09-09 00:21:19.421247
++/ask what could be done to make the training easier to observe
+
+# 2024-09-09 00:23:12.596392
++go ahead
+
+# 2024-09-09 00:29:32.698711
++/add scripts/flickr_test/3_test_train.py
+
+# 2024-09-09 00:30:20.602792
++/ask how could this could be cleaned
+
+# 2024-09-09 00:30:53.516608
++clean up some of the redundant code
+
+# 2024-09-09 00:32:10.025853
++/clear
+
+# 2024-09-09 00:32:12.638264
++/add scripts/flickr_test/3_test_train.py
+
+# 2024-09-09 00:32:39.000364
++clean up and factorise the redundant code
+
+# 2024-09-09 00:33:52.871260
++/tokens
+
+# 2024-09-09 00:34:04.165085
++/model gemini/gemini-1.5-flash-latest
+
+# 2024-09-09 00:35:16.464626
++change the evaulate functions so that they save the images as a single file stacked vertically going down in ascending order, also save the text in a single file seperated by newlines 
+
+# 2024-09-09 00:36:44.322370
++/run scripts/flickr_test/3_test_train.py
+
+# 2024-09-09 00:37:37.868667
++/undo
+
+# 2024-09-09 00:38:46.998701
++change the evaulate functions so that they save the images as a single file stacked vertically going down in ascending order
+
+# 2024-09-09 00:41:09.745022
++/undo
