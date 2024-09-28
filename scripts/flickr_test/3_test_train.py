@@ -169,9 +169,9 @@ def train_autoencoder(model: ImageEmbeddingVAE,
             recon_batch, latent, mu, logvar = model(batch)
             
             image_loss = 100 * F.mse_loss(recon_batch.image, batch.image, reduction='mean')
-            perceptual_loss_value =model.perceptual_loss(recon_batch.image, batch.image)
+            perceptual_loss_value = 10* model.perceptual_loss(recon_batch.image, batch.image)
             
-            embedding_scaling = 1
+            embedding_scaling = 5
             embedding_loss = embedding_scaling * F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1), reduction='mean')
             
             kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
@@ -204,7 +204,7 @@ def train_autoencoder(model: ImageEmbeddingVAE,
                 recon_batch, latent, mu, logvar = model(batch)
                 
                 image_loss = 100 * F.mse_loss(recon_batch.image, batch.image, reduction='mean')
-                perceptual_loss_value =model.perceptual_loss(recon_batch.image, batch.image)
+                perceptual_loss_value = 10* model.perceptual_loss(recon_batch.image, batch.image)
                 embedding_loss = embedding_scaling * F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1), reduction='mean')
                 kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
                 total_loss = image_loss +  perceptual_loss_value + embedding_loss + kl_weight * kl_loss
@@ -233,17 +233,16 @@ def train_autoencoder(model: ImageEmbeddingVAE,
 
 if __name__ == "__main__":
     print("Starting main program")
-    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
     image_dir = os.getcwd()+"/data/flickr30k_images/flickr30k_images"
     
     print("Creating data loaders...")
-    train_loader, val_loader = create_dataloaders(image_dir, batch_size=50, num_workers=8)
+    train_loader, val_loader = create_dataloaders(image_dir, batch_size=100, num_workers=8)
 
     print("Initializing model...")
     model = ImageEmbeddingVAE(
         text_latent_dim=256,
-        combined_latent_dim=384,
+        combined_latent_dim=256,
         text_embedding_dim=768,
         selected_layers=[3, 6, 13],
         num_combiner_layers=1  # Adjust this as needed
@@ -285,3 +284,5 @@ if __name__ == "__main__":
         learning_rate=1e-3,
         device='cuda'
     )
+
+    os.system("python scripts/flickr_test/4_inference.py --image_dir raw_data/skyscrapers --text_list 'love' 'hate' ")

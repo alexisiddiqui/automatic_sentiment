@@ -5,3 +5,9 @@ raw_data
 generated_*/
 
 *.pth
+
+!best_vae_model.pth
+
+inference_output/*
+
+saved

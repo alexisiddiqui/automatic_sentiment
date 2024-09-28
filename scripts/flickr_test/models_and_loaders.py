@@ -214,6 +214,59 @@ class ImageDecoder(nn.Module):
         x = torch.tanh(self.deconv4(x))
         # Ensure output is the correct size
         return self.resize(x)
+    
+class ImprovedImageDecoder(nn.Module):
+    def __init__(self, latent_dim, num_channels=3):
+        super(ImprovedImageDecoder, self).__init__()
+        self.latent_dim = latent_dim
+        self.num_channels = num_channels
+
+        # Initial dense layer
+        self.fc = nn.Linear(latent_dim, 512 * 4 * 4)
+        
+        # Upsampling blocks
+        self.upsample_blocks = nn.ModuleList([
+            self._make_upsample_block(512, 256),
+            self._make_upsample_block(256, 128),
+            self._make_upsample_block(128, 64),
+            self._make_upsample_block(64, 32)
+        ])
+        
+        # Final convolution to get the desired number of channels
+        self.final_conv = nn.Conv2d(32, num_channels, kernel_size=3, padding=1)
+        
+        # Normalization layers
+        self.norm = nn.BatchNorm2d(num_channels)
+        
+        # Activation functions
+        self.lrelu = nn.LeakyReLU(0.2, inplace=True)
+        
+        # Remove the resize operation as it's no longer needed
+
+    def _make_upsample_block(self, in_channels, out_channels):
+        return nn.Sequential(
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+
+    def forward(self, x):
+        # Initial dense layer and reshape
+        x = self.fc(x)
+        x = x.view(x.size(0), 512, 4, 4)
+        
+        # Apply upsampling blocks
+        for block in self.upsample_blocks:
+            x = block(x)
+        
+        # Final convolution and normalization
+        x = self.final_conv(x)
+        x = self.norm(x)
+        
+        # Apply tanh activation to ensure output is in [-1, 1] range
+        x = torch.tanh(x)
+        
+        return x
 
 class TextDecoder(nn.Module):
     def __init__(self, latent_dim, output_dim):
