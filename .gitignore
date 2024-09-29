@@ -8,6 +8,6 @@ generated_*/
 
 !best_vae_model.pth
 
-inference_output/*
+inference_output
 
 saved

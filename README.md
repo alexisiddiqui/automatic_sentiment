@@ -84,7 +84,7 @@ You can modify hyperparameters in the `sentiment_AE/settings.py` file.
 
 
 
-### Inference
+# Inference
 
 ## Note: Working model weights are given by default - please get in touch if this is giving strange outputs.
 

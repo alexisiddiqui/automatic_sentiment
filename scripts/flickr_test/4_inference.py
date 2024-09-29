@@ -15,11 +15,11 @@ def load_model(model_path, device):
 
 
     model = ImageEmbeddingVAE(
-        text_latent_dim=256,
-        combined_latent_dim=256,
-        text_embedding_dim=768,
-        selected_layers=[3, 6, 13],
-        num_combiner_layers=1
+        # text_latent_dim=256,
+        # combined_latent_dim=256,
+        # text_embedding_dim=768,
+        # selected_layers=[3, 6, 13],
+        # num_combiner_layers=1
     )
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)

@@ -241,11 +241,11 @@ if __name__ == "__main__":
 
     print("Initializing model...")
     model = ImageEmbeddingVAE(
-        text_latent_dim=256,
-        combined_latent_dim=256,
-        text_embedding_dim=768,
-        selected_layers=[3, 6, 13],
-        num_combiner_layers=1  # Adjust this as needed
+        # text_latent_dim=256,
+        # combined_latent_dim=256,
+        # text_embedding_dim=768,
+        # selected_layers=[1, 3, 6, 13],
+        # num_combiner_layers=1  # Adjust this as needed
     )
     torch.compile(model)
     def print_model_parameters_sorted(model, top_k=10):

@@ -138,6 +138,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+
 class ImageEncoder(nn.Module):
     def __init__(self, mobilenet_encoder, selected_layers):
         super(ImageEncoder, self).__init__()
@@ -214,7 +215,7 @@ class ImageDecoder(nn.Module):
         x = torch.tanh(self.deconv4(x))
         # Ensure output is the correct size
         return self.resize(x)
-    
+
 class ImprovedImageDecoder(nn.Module):
     def __init__(self, latent_dim, num_channels=3):
         super(ImprovedImageDecoder, self).__init__()
@@ -222,7 +223,7 @@ class ImprovedImageDecoder(nn.Module):
         self.num_channels = num_channels
 
         # Initial dense layer
-        self.fc = nn.Linear(latent_dim, 512 * 4 * 4)
+        self.fc = nn.Linear(latent_dim, 512 * 7 * 7)
         
         # Upsampling blocks
         self.upsample_blocks = nn.ModuleList([
@@ -235,13 +236,11 @@ class ImprovedImageDecoder(nn.Module):
         # Final convolution to get the desired number of channels
         self.final_conv = nn.Conv2d(32, num_channels, kernel_size=3, padding=1)
         
-        # Normalization layers
-        self.norm = nn.BatchNorm2d(num_channels)
+        # Ensure output size is 224x224
+        self.upsample = nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
         
         # Activation functions
         self.lrelu = nn.LeakyReLU(0.2, inplace=True)
-        
-        # Remove the resize operation as it's no longer needed
 
     def _make_upsample_block(self, in_channels, out_channels):
         return nn.Sequential(
@@ -253,19 +252,21 @@ class ImprovedImageDecoder(nn.Module):
     def forward(self, x):
         # Initial dense layer and reshape
         x = self.fc(x)
-        x = x.view(x.size(0), 512, 4, 4)
+        x = x.view(x.size(0), 512, 7, 7)
         
         # Apply upsampling blocks
         for block in self.upsample_blocks:
             x = block(x)
         
-        # Final convolution and normalization
+        # Final convolution
         x = self.final_conv(x)
-        x = self.norm(x)
+        
+        # Ensure output size is 224x224
+        x = self.upsample(x)
         
         # Apply tanh activation to ensure output is in [-1, 1] range
         x = torch.tanh(x)
-        
+                
         return x
 
 class TextDecoder(nn.Module):
@@ -332,7 +333,12 @@ class ConvFlowCombiner(nn.Module):
         return self.activation(x)
 
 class ImageEmbeddingVAE(nn.Module):
-    def __init__(self, text_latent_dim, combined_latent_dim, text_embedding_dim, selected_layers, num_combiner_layers=3):
+    def __init__(self, text_latent_dim=256,
+                  combined_latent_dim=256, 
+                  text_embedding_dim=768, 
+                  selected_layers=[3, 6, 13],
+                  num_combiner_layers=1
+                  ):
         super(ImageEmbeddingVAE, self).__init__()
         self.mobilenet_encoder = MobileNetV2Encoder()
         self.image_encoder = ImageEncoder(self.mobilenet_encoder, selected_layers)
@@ -349,7 +355,7 @@ class ImageEmbeddingVAE(nn.Module):
             num_flow_layers=num_combiner_layers
         )
         
-        self.image_decoder = ImageDecoder(combined_latent_dim)
+        self.image_decoder = ImprovedImageDecoder(combined_latent_dim)
         self.text_decoder = TextDecoder(combined_latent_dim, text_embedding_dim)
         self.combined_latent_dim = combined_latent_dim
         
@@ -360,17 +366,40 @@ class ImageEmbeddingVAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
+    # def forward(self, input_data):
+    #     image_features = self.image_encoder(input_data.image)
+    #     text_z = self.text_encoder(input_data.embedding)
+        
+    #     combined = self.combiner(image_features, text_z)
+    #     mu, logvar = torch.chunk(combined, 2, dim=1)
+        
+    #     latent = self.reparameterize(mu, logvar)
+        
+    #     reconstructed_image = self.image_decoder(latent)
+    #     reconstructed_embedding = self.text_decoder(latent)
+        
+        #     return ImageEmbeddingModelInput(image=reconstructed_image, embedding=reconstructed_embedding, filename=input_data.filename), latent, mu, logvar
     def forward(self, input_data):
+        # print(f" Input image shape: {input_data.image.shape}")
+        
         image_features = self.image_encoder(input_data.image)
+        # print(f"Encoded image features shapes: {[f.shape for f in image_features]}")
+        
         text_z = self.text_encoder(input_data.embedding)
+        # print(f"Encoded text shape: {text_z.shape}")
         
         combined = self.combiner(image_features, text_z)
         mu, logvar = torch.chunk(combined, 2, dim=1)
+        # print(f"Mu shape: {mu.shape}, Logvar shape: {logvar.shape}")
         
         latent = self.reparameterize(mu, logvar)
+        # print(f"Latent shape: {latent.shape}")
         
         reconstructed_image = self.image_decoder(latent)
+        # print(f"Reconstructed image shape: {reconstructed_image.shape}")
+        
         reconstructed_embedding = self.text_decoder(latent)
+        # print(f"Reconstructed embedding shape: {reconstructed_embedding.shape}")
         
         return ImageEmbeddingModelInput(image=reconstructed_image, embedding=reconstructed_embedding, filename=input_data.filename), latent, mu, logvar
 
