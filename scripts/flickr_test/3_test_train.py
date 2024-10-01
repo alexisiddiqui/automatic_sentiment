@@ -171,7 +171,7 @@ def train_autoencoder(model: ImageEmbeddingVAE,
             image_loss = 100 * F.mse_loss(recon_batch.image, batch.image, reduction='mean')
             perceptual_loss_value = 10* model.perceptual_loss(recon_batch.image, batch.image)
             
-            embedding_scaling = 5
+            embedding_scaling = 25
             embedding_loss = embedding_scaling * F.cross_entropy(recon_batch.embedding, batch.embedding.argmax(dim=1), reduction='mean')
             
             kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
@@ -280,9 +280,11 @@ if __name__ == "__main__":
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=20,
+        num_epochs=10,
         learning_rate=1e-3,
         device='cuda'
     )
 
-    os.system("python scripts/flickr_test/4_inference.py --image_dir raw_data/skyscrapers --text_list 'love' 'hate' ")
+
+
+    os.system("python scripts/flickr_test/4_inference.py --image_dir raw_data/skyscrapers --text_list 'fantastic' 'who' ")

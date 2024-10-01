@@ -60,8 +60,8 @@ def main(args):
 
     if output_dir is None:
         output_dir = os.path.join("inference_output", os.path.basename(args.image_dir))
-        if os.path.exists(output_dir):
-            os.rmdir(output_dir)
+    if os.path.exists(output_dir):
+        os.system(f"rm -r {output_dir}")
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

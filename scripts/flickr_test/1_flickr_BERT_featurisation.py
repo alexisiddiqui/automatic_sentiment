@@ -6,6 +6,12 @@ import time
 import re
 import os
 from transformers import DistilBertTokenizer, DistilBertModel
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.tag import pos_tag
+from nltk.tag.mapping import tagset_mapping
+import string
 
 print("CUDA Available:", torch.cuda.is_available())
 print("MPS Available:", torch.backends.mps.is_available())
@@ -20,37 +26,65 @@ tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 model = DistilBertModel.from_pretrained('distilbert-base-uncased').to(device)
 model.eval()
 print("DistilBERT model and tokenizer loaded.")
-import nltk
-from nltk.corpus import stopwords
-import string
 
-# Download the stopwords data (you only need to do this once)
+# Download necessary NLTK data
 nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('universal_tagset')
 
 # Get the list of English stopwords
 stop_words = set(stopwords.words('english'))
+
+# Get the mapping from Penn Treebank tags to Universal tags
+tag_mapping = tagset_mapping('en-ptb', 'universal')
 
 def preprocess_text(text):
     # Convert to lowercase
     text = text.lower()
     
     # Remove punctuation
-    text = text.translate(str.maketrans('', '', string.punctuation))
+    text_no_punct = text.translate(str.maketrans('', '', string.punctuation))
     
     # Remove numbers
-    text = re.sub(r'\d+', '', text)
+    text_no_num = re.sub(r'\d+', '', text_no_punct)
     
-    # Remove extra spaces
-    text = re.sub(r'\s+', ' ', text).strip()
+    # Tokenize the text
+    words = word_tokenize(text_no_num)
+    
+    # Perform POS tagging with Penn Treebank tags
+    penn_tags = pos_tag(words)
+    
+    # Convert Penn Treebank tags to Universal tags
+    universal_tags = [(word, tag_mapping.get(tag, tag)) for word, tag in penn_tags]
+    
+    # Print the universal tags for debugging
+    # print(f"Universal tags: {universal_tags}")
+    
+    # Remove words that are not emotive or descriptive
+    relevant_words = [word for word, tag in universal_tags if tag not in ['CONJ', 'DET', 'ADP', 'PRT']]
     
     # Remove stopwords and single characters
-    words = text.split()
-    words = [word for word in words if word not in stop_words and len(word) > 1]
+    relevant_words = [word for word in relevant_words if word not in stop_words and len(word) > 1]
     
     # Join the words back into a string
-    text = ' '.join(words)
+    processed_text = ' '.join(relevant_words)
+
+    # print(f"Original text: {text}")
+    # print(f"Processed text: {processed_text}")
+
+    if len(processed_text) == 0:
+        # If the processed text is empty, return the original text without punctuation and numbers
+        
+        print(f"Returning text without punctuation and numbers: {text_no_num}")
+        # print(f"Original text: {text}")
+        # print(f"Penn Treebank tags: {penn_tags}")
+        print(f"Universal tags: {universal_tags}")
     
-    return text
+        return text_no_num
+    
+    return processed_text
+
 
 def get_distilbert_embeddings(texts, batch_size=128):
     all_token_embeddings = []
@@ -127,7 +161,7 @@ def process_csv(input_file, output_file):
 
 # Usage
 input_file = os.getcwd()+"/data/flickr30k_images/results.csv"
-output_file = input_file.replace('.csv', '_distilbert_embeddings.csv')
+output_file = input_file.replace('.csv', '_distilbert_verb_adj_embeddings.csv')
 
 print("Starting CSV processing...")
 process_csv(input_file, output_file)

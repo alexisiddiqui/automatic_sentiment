@@ -336,7 +336,7 @@ class ImageEmbeddingVAE(nn.Module):
     def __init__(self, text_latent_dim=256,
                   combined_latent_dim=256, 
                   text_embedding_dim=768, 
-                  selected_layers=[3, 6, 13],
+                  selected_layers=list(range(3, 14)),
                   num_combiner_layers=1
                   ):
         super(ImageEmbeddingVAE, self).__init__()
