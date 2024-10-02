@@ -234,10 +234,12 @@ def train_autoencoder(model: ImageEmbeddingVAE,
 if __name__ == "__main__":
     print("Starting main program")
 
-    image_dir = os.getcwd()+"/data/flickr30k_images/flickr30k_images"
-    
+    flickr_image_dir = os.getcwd()+"/data/flickr30k_images/flickr30k_images"
+    celeba_image_dir = os.getcwd()+"/data/img_align_celeba/img_align_celeba"
+    image_dirs = [flickr_image_dir, celeba_image_dir]
+
     print("Creating data loaders...")
-    train_loader, val_loader = create_dataloaders(image_dir, batch_size=100, num_workers=8)
+    train_loader, val_loader = create_dataloaders(image_dirs, batch_size=100, num_workers=8)
 
     print("Initializing model...")
     model = ImageEmbeddingVAE(
@@ -287,4 +289,4 @@ if __name__ == "__main__":
 
 
 
-    os.system("python scripts/flickr_test/4_inference.py --image_dir raw_data/skyscrapers --text_list 'fantastic' 'who' ")
+    os.system("python scripts/flickr_test/4_inference.py --image_dir test_data/skyscrapers --text_list 'fantastic' 'who' ")

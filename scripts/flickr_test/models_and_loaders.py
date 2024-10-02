@@ -1,13 +1,85 @@
 
 
+# import torch
+# from torch.utils.data import Dataset, DataLoader
+# from torchvision import transforms
+# from PIL import Image
+# import pandas as pd
+# import os
+# from dataclasses import dataclass
+# from typing import Tuple
+
+# @dataclass
+# class ImageEmbeddingModelInput:
+#     image: torch.Tensor
+#     embedding: torch.Tensor
+#     filename: str
+
+# IMAGE_SIZE = 224
+
+# class ImageEmbeddingDataset(Dataset):
+#     def __init__(self, image_dir: str, csv_path: str, transform=None):
+#         self.image_dir = image_dir
+#         self.data = pd.read_csv(csv_path, header=0)
+#         self.transform = transform or transforms.Compose([
+#             transforms.Resize((224, 224)),
+#             transforms.ToTensor(),
+#             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+#         ])
+
+#     def __len__(self):
+#         return len(self.data)
+
+#     def __getitem__(self, idx) -> ImageEmbeddingModelInput:
+#         row = self.data.iloc[idx]
+#         image_name = row['image_name']
+#         embedding = torch.tensor(row.filter(regex='^embedding_').values.astype('float32'))
+        
+#         image_path = os.path.join(self.image_dir, image_name)
+#         image = Image.open(image_path).convert('RGB')
+        
+#         if self.transform:
+#             image = self.transform(image)
+        
+#         return ImageEmbeddingModelInput(image=image, embedding=embedding, filename=image_name)
+
+# def collate_fn(batch):
+#     images = torch.stack([item.image for item in batch])
+#     embeddings = torch.stack([item.embedding for item in batch])
+#     filenames = [item.filename for item in batch]
+#     return ImageEmbeddingModelInput(image=images, embedding=embeddings, filename=filenames)
+
+# # def create_dataloader(image_dir: str, csv_path: str, batch_size: int = 32, num_workers: int = 4) -> DataLoader:
+# #     dataset = ImageEmbeddingDataset(image_dir, csv_path)
+# #     return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn)
+
+# def create_dataloaders(image_dir: str, batch_size: int = 32, num_workers: int = 4) -> Tuple[DataLoader, DataLoader]:
+#     _dir = os.path.dirname(image_dir)
+#     train_csv_path = os.path.join(_dir, "train_data.csv")
+#     val_csv_path = os.path.join(_dir, "val_data.csv")
+
+#     # Update the transform to include resizing
+#     transform = transforms.Compose([
+#         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+#     ])
+    
+#     train_dataset = ImageEmbeddingDataset(image_dir, train_csv_path, transform=transform)
+#     val_dataset = ImageEmbeddingDataset(image_dir, val_csv_path, transform=transform)
+    
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn, pin_memory=True)
+#     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn, pin_memory=True)
+    
+#     return train_loader, val_loader
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision import transforms
 from PIL import Image
 import pandas as pd
 import os
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, List, Optional
 
 @dataclass
 class ImageEmbeddingModelInput:
@@ -22,7 +94,7 @@ class ImageEmbeddingDataset(Dataset):
         self.image_dir = image_dir
         self.data = pd.read_csv(csv_path, header=0)
         self.transform = transform or transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
@@ -34,13 +106,10 @@ class ImageEmbeddingDataset(Dataset):
         row = self.data.iloc[idx]
         image_name = row['image_name']
         embedding = torch.tensor(row.filter(regex='^embedding_').values.astype('float32'))
-        
         image_path = os.path.join(self.image_dir, image_name)
         image = Image.open(image_path).convert('RGB')
-        
         if self.transform:
             image = self.transform(image)
-        
         return ImageEmbeddingModelInput(image=image, embedding=embedding, filename=image_name)
 
 def collate_fn(batch):
@@ -49,30 +118,66 @@ def collate_fn(batch):
     filenames = [item.filename for item in batch]
     return ImageEmbeddingModelInput(image=images, embedding=embeddings, filename=filenames)
 
-# def create_dataloader(image_dir: str, csv_path: str, batch_size: int = 32, num_workers: int = 4) -> DataLoader:
-#     dataset = ImageEmbeddingDataset(image_dir, csv_path)
-#     return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn)
+def create_dataloaders(
+    image_dirs: List[str],
+    csv_paths: Optional[List[str]] = None,
+    batch_size: int = 32,
+    num_workers: int = 4
+) -> Tuple[DataLoader, DataLoader]:
+    
+    if csv_paths is None:
+        csv_paths = []
+        for image_dir in image_dirs:
+            dir_name = os.path.dirname(image_dir)
+            csv_paths.append((
+                os.path.join(dir_name, "train_data.csv"),
+                os.path.join(dir_name, "val_data.csv")
+            ))
+    else:
+        if len(csv_paths) != len(image_dirs):
+            raise ValueError("The number of CSV paths must match the number of image directories")
+        csv_paths = [(csv_path, csv_path.replace('train', 'val')) for csv_path in csv_paths]
 
-def create_dataloaders(image_dir: str, batch_size: int = 32, num_workers: int = 4) -> Tuple[DataLoader, DataLoader]:
-    _dir = os.path.dirname(image_dir)
-    train_csv_path = os.path.join(_dir, "train_data.csv")
-    val_csv_path = os.path.join(_dir, "val_data.csv")
-
-    # Update the transform to include resizing
     transform = transforms.Compose([
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-    
-    train_dataset = ImageEmbeddingDataset(image_dir, train_csv_path, transform=transform)
-    val_dataset = ImageEmbeddingDataset(image_dir, val_csv_path, transform=transform)
-    
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn, pin_memory=True)
-    
+
+    train_datasets = []
+    val_datasets = []
+
+    for image_dir, (train_csv, val_csv) in zip(image_dirs, csv_paths):
+        train_datasets.append(ImageEmbeddingDataset(image_dir, train_csv, transform=transform))
+        val_datasets.append(ImageEmbeddingDataset(image_dir, val_csv, transform=transform))
+
+    combined_train_dataset = ConcatDataset(train_datasets)
+    combined_val_dataset = ConcatDataset(val_datasets)
+
+    train_loader = DataLoader(
+        combined_train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True
+    )
+
+    val_loader = DataLoader(
+        combined_val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True
+    )
+
     return train_loader, val_loader
 
+# Usage example:
+# image_dirs = ["/path/to/image/dir1", "/path/to/image/dir2", "/path/to/image/dir3"]
+# csv_dir = "/path/to/csv/dir"
+# train_loader, val_loader = create_dataloaders(image_dirs, csv_dir)
 
 # # Usage example
 # if __name__ == "__main__":
