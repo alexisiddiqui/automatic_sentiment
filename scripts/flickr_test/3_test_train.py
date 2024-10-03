@@ -236,7 +236,8 @@ if __name__ == "__main__":
 
     flickr_image_dir = os.getcwd()+"/data/flickr30k_images/flickr30k_images"
     celeba_image_dir = os.getcwd()+"/data/img_align_celeba/img_align_celeba"
-    image_dirs = [flickr_image_dir, celeba_image_dir]
+    wikiart_image_dir = os.getcwd()+"/data/wiki-art/wiki-art"
+    image_dirs = [flickr_image_dir, celeba_image_dir, wikiart_image_dir]
 
     print("Creating data loaders...")
     train_loader, val_loader = create_dataloaders(image_dirs, batch_size=100, num_workers=8)
@@ -282,7 +283,7 @@ if __name__ == "__main__":
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=10,
+        num_epochs=5,
         learning_rate=1e-3,
         device='cuda'
     )

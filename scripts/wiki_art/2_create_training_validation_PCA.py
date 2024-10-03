@@ -13,7 +13,7 @@ def create_train_val_split(csv_path, n_clusters=500, val_size=0.2, random_state=
     df = pd.read_csv(csv_path, header=0)
 
     # Separate filenames and embeddings
-    filenames = df['image_path'].values
+    filenames = df['image_name'].values
     embeddings = df.filter(regex='^embedding_').values
 
     print("Normalizing embeddings...")

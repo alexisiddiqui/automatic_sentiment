@@ -6,6 +6,7 @@ import time
 import os
 from transformers import DistilBertTokenizer, DistilBertModel
 from tqdm import tqdm
+from PIL import Image
 
 print("CUDA Available:", torch.cuda.is_available())
 print("MPS Available:", torch.backends.mps.is_available())
@@ -42,35 +43,56 @@ def get_distilbert_embeddings(texts, batch_size=128):
         all_embeddings.extend(embeddings)
     return all_embeddings
 
-def process_csv(input_file, output_file):
+def test_load_image(image_path):
+    try:
+        image = Image.open(image_path).convert('RGB')
+
+        return True
+    except:
+        print(image_path)
+        
+        return False
+
+def process_csv(input_file, output_file, image_dir):
     print(f"Reading CSV file: {input_file}")
     df = pd.read_csv(input_file)
     print(f"CSV file read. Total rows: {len(df)}")
-
+    
     start_time = time.time()
-
-    # Preprocess labels
-    df['class_name'] = df['class_name'].apply(preprocess_label)
-
+    
+    # Preprocess labels and test-load images
+    valid_rows = []
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing images", unit="image"):
+        image_path = os.path.join(image_dir, row['image_name'])
+        if test_load_image(image_path):
+            row['class_name'] = preprocess_label(row['class_name'])
+            valid_rows.append(row)
+    
+    # Create a new DataFrame with only valid rows
+    df_valid = pd.DataFrame(valid_rows)
+    print(f"Valid images: {len(df_valid)} out of {len(df)} total")
+    
     # Generate embeddings for all preprocessed labels
-    embeddings = get_distilbert_embeddings(df['class_name'].tolist())
-
+    embeddings = get_distilbert_embeddings(df_valid['class_name'].tolist())
+    
     print("Embedding generation complete. Saving results...")
-
+    
     with open(output_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_path', 'class_name', 'labels'] + [f'embedding_{i}' for i in range(768)])
-        for (_, row), embedding in tqdm(zip(df.iterrows(), embeddings), total=len(df), desc="Writing results", unit="row"):
-            writer.writerow([row['image_path'], row['class_name'], row['labels']] + list(embedding))
-
+        writer.writerow(['image_name', 'class_name', 'labels'] + [f'embedding_{i}' for i in range(768)])
+        for (_, row), embedding in tqdm(zip(df_valid.iterrows(), embeddings), total=len(df_valid), desc="Writing results", unit="row"):
+            writer.writerow([row['image_name'], row['class_name'], row['labels']] + list(embedding))
+    
     total_time = time.time() - start_time
-    print(f"Processed {len(df)} images in {total_time:.2f} seconds.")
-    print(f"Average time per image: {total_time/len(df):.2f} seconds")
+    print(f"Processed {len(df_valid)} valid images out of {len(df)} total in {total_time:.2f} seconds.")
+    print(f"Average time per valid image: {total_time/len(df_valid):.2f} seconds")
     print(f"Results saved to {output_file}")
 
 # Usage
 input_file = os.path.join(os.getcwd(), "data", "wiki-art", "WikiArt.csv")
-output_file = input_file.replace('.csv', '_distilbert_embeddings.csv')
+output_file = input_file.replace('.csv', '_distilbert_embeddings_valid.csv')
+image_dir = os.path.join(os.getcwd(), "data", "wiki-art", "wiki-art")  # Adjust this path to your image directory
+
 print("Starting CSV processing...")
-process_csv(input_file, output_file)
+process_csv(input_file, output_file, image_dir)
 print("CSV processing complete.")

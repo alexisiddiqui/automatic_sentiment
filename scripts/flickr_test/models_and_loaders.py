@@ -90,9 +90,12 @@ class ImageEmbeddingModelInput:
 IMAGE_SIZE = 224
 
 class ImageEmbeddingDataset(Dataset):
-    def __init__(self, image_dir: str, csv_path: str, transform=None):
+    def __init__(self, image_dir: str, csv_path: str, transform=None, labelled=True):
         self.image_dir = image_dir
-        self.data = pd.read_csv(csv_path, header=0)
+        if labelled:
+            self.data = pd.read_csv(csv_path, header=0)
+        else:
+            self.data = pd.DataFrame({'image_name': os.listdir(image_dir), 'embedding': [torch.zeros(768) for _ in range(len(os.listdir(image_dir)))]})
         self.transform = transform or transforms.Compose([
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
@@ -107,12 +110,17 @@ class ImageEmbeddingDataset(Dataset):
         image_name = row['image_name']
         embedding = torch.tensor(row.filter(regex='^embedding_').values.astype('float32'))
         image_path = os.path.join(self.image_dir, image_name)
-        image = Image.open(image_path).convert('RGB')
+        try:
+            image = Image.open(image_path).convert('RGB')
+        except:
+            print(image_path)
+            return None
         if self.transform:
             image = self.transform(image)
         return ImageEmbeddingModelInput(image=image, embedding=embedding, filename=image_name)
 
 def collate_fn(batch):
+    batch =  list(filter(lambda x: x is not None, batch))
     images = torch.stack([item.image for item in batch])
     embeddings = torch.stack([item.embedding for item in batch])
     filenames = [item.filename for item in batch]
