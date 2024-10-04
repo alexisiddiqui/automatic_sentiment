@@ -284,7 +284,7 @@ if __name__ == "__main__":
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=5,
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         device='cuda'
     )
 

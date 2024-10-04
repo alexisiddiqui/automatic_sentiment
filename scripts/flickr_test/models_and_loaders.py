@@ -251,214 +251,135 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import transforms
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
+
+class MobileNetV2Encoder(nn.Module):
+    def __init__(self):
+        super(MobileNetV2Encoder, self).__init__()
+        self.mobilenet = mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
+        self.mobilenet.classifier = nn.Identity()
+        for param in self.mobilenet.parameters():
+            param.requires_grad = False
+
+    def forward(self, x, layers=None):
+        features = []
+        for i, layer in enumerate(self.mobilenet.features):
+            x = layer(x)
+            features.append(x)
+            if layers is not None and i+1 in layers:
+                return features
+        return features
 
 class ImageEncoder(nn.Module):
     def __init__(self, mobilenet_encoder, selected_layers):
         super(ImageEncoder, self).__init__()
         self.mobilenet_encoder = mobilenet_encoder
         self.selected_layers = selected_layers
-        self.dropout = nn.Dropout(0.1)
-        
-        # Add a resize transform
-        self.resize = transforms.Resize((IMAGE_SIZE, IMAGE_SIZE))
+        self.dropout = nn.Dropout(0.2)  # Increased dropout rate
+        self.resize = transforms.Resize((224, 224))
 
     def forward(self, x):
-        # Ensure input is the correct size
         x = self.resize(x)
         features = self.mobilenet_encoder(x, self.selected_layers)
         return [self.dropout(F.relu(feature)) for feature in features]
-    
 
 class TextEncoder(nn.Module):
     def __init__(self, input_dim, latent_dim):
         super(TextEncoder, self).__init__()
         self.fc1 = nn.Linear(input_dim, 512)
         self.fc2 = nn.Linear(512, latent_dim)
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(0.2)  # Increased dropout rate
 
     def forward(self, x):
         x = self.dropout(F.relu(self.fc1(x)))
         return self.fc2(x)
 
-class FlexibleMultiLayerFlowCombiner(nn.Module):
-    def __init__(self, image_feature_shapes, text_latent_dim, combined_latent_dim, num_layers=3):
-        super(FlexibleMultiLayerFlowCombiner, self).__init__()
-        
-        self.image_feature_sizes = [shape[0] * shape[1] * shape[2] for shape in image_feature_shapes]
-        self.total_image_features = sum(self.image_feature_sizes)
-        
-        # Fixed flow layers
-        self.flow_layers = nn.ModuleList([
-            nn.Linear(self.total_image_features + text_latent_dim if i == 0 else combined_latent_dim, combined_latent_dim)
-            for i in range(num_layers)
+class ConvFlowCombiner(nn.Module):
+    def __init__(self, image_feature_shapes, text_latent_dim, combined_latent_dim, num_flow_layers=3):
+        super(ConvFlowCombiner, self).__init__()
+        self.conv_layers = nn.ModuleList([
+            nn.Conv2d(shape[0], 32, kernel_size=3, padding=1)
+            for shape in image_feature_shapes
         ])
-        
-        self.combined_latent_dim = combined_latent_dim
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.total_conv_features = 32 * len(image_feature_shapes)
+        self.feature_combiner = nn.Linear(self.total_conv_features + text_latent_dim, combined_latent_dim)
+        self.flow_layers = nn.ModuleList([
+            nn.Linear(combined_latent_dim, combined_latent_dim)
+            for _ in range(num_flow_layers - 1)
+        ])
+        self.final_layer = nn.Linear(combined_latent_dim, combined_latent_dim * 2)
         self.activation = nn.Tanh()
+        self.dropout = nn.Dropout(0.2)  # Added dropout
 
     def forward(self, image_features, text_z):
-        # Flatten and concatenate all image features
-        flat_features = [f.view(f.size(0), -1) for f in image_features]
-        x = torch.cat(flat_features + [text_z], dim=1)
-        
-        # Apply flow layers
+        conv_outputs = [self.global_pool(F.relu(conv(feat))).squeeze(-1).squeeze(-1) 
+                        for conv, feat in zip(self.conv_layers, image_features)]
+        combined_image_features = torch.cat(conv_outputs, dim=1)
+        combined_features = torch.cat([combined_image_features, text_z], dim=1)
+        x = F.relu(self.feature_combiner(combined_features))
         for layer in self.flow_layers:
-            x = F.relu(layer(x))
-        
+            x = self.dropout(F.relu(layer(x)))  # Applied dropout
+        x = self.final_layer(x)
         return self.activation(x)
-class ImageDecoder(nn.Module):
-    def __init__(self, latent_dim):
-        super(ImageDecoder, self).__init__()
-        self.fc = nn.Linear(latent_dim, 256 * 7 * 7)
-        self.deconv1 = nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1)
-        self.deconv2 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)
-        self.deconv3 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
-        self.deconv4 = nn.ConvTranspose2d(32, 3, kernel_size=4, stride=2, padding=1)
-        self.dropout = nn.Dropout(0.1)
-        
-        # Add a final resize to ensure output is correct size
-        self.resize = transforms.Resize((224, 224))  # Assuming IMAGE_SIZE is 224
-
-    def forward(self, x):
-        x = self.dropout(self.fc(x))
-        x = x.view(x.size(0), 256, 7, 7)
-        x = self.dropout(F.relu(self.deconv1(x)))
-        x = self.dropout(F.relu(self.deconv2(x)))
-        x = self.dropout(F.relu(self.deconv3(x)))
-        x = torch.tanh(self.deconv4(x))
-        # Ensure output is the correct size
-        return self.resize(x)
 
 class ImprovedImageDecoder(nn.Module):
     def __init__(self, latent_dim, num_channels=3):
         super(ImprovedImageDecoder, self).__init__()
-        self.latent_dim = latent_dim
-        self.num_channels = num_channels
-
-        # Initial dense layer
         self.fc = nn.Linear(latent_dim, 512 * 7 * 7)
-        
-        # Upsampling blocks
         self.upsample_blocks = nn.ModuleList([
             self._make_upsample_block(512, 256),
             self._make_upsample_block(256, 128),
             self._make_upsample_block(128, 64),
             self._make_upsample_block(64, 32)
         ])
-        
-        # Final convolution to get the desired number of channels
         self.final_conv = nn.Conv2d(32, num_channels, kernel_size=3, padding=1)
-        
-        # Ensure output size is 224x224
         self.upsample = nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
-        
-        # Activation functions
         self.lrelu = nn.LeakyReLU(0.2, inplace=True)
+        self.dropout = nn.Dropout(0.2)  # Added dropout
 
     def _make_upsample_block(self, in_channels, out_channels):
         return nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True)
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.2)  # Added dropout to each upsample block
         )
 
     def forward(self, x):
-        # Initial dense layer and reshape
-        x = self.fc(x)
+        x = self.dropout(self.fc(x))  # Applied dropout
         x = x.view(x.size(0), 512, 7, 7)
-        
-        # Apply upsampling blocks
         for block in self.upsample_blocks:
             x = block(x)
-        
-        # Final convolution
         x = self.final_conv(x)
-        
-        # Ensure output size is 224x224
         x = self.upsample(x)
-        
-        # Apply tanh activation to ensure output is in [-1, 1] range
-        x = torch.tanh(x)
-                
-        return x
+        return torch.tanh(x)
 
 class TextDecoder(nn.Module):
     def __init__(self, latent_dim, output_dim):
         super(TextDecoder, self).__init__()
         self.fc1 = nn.Linear(latent_dim, 512)
         self.fc2 = nn.Linear(512, output_dim)
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(0.2)  # Increased dropout rate
 
     def forward(self, x):
         x = self.dropout(F.relu(self.fc1(x)))
         return self.fc2(x)
-class ConvFlowCombiner(nn.Module):
-    def __init__(self, image_feature_shapes, text_latent_dim, combined_latent_dim, num_flow_layers=3):
-        super(ConvFlowCombiner, self).__init__()
-        
-        # Convolutional layers for each image feature level
-        self.conv_layers = nn.ModuleList([
-            nn.Conv2d(shape[0], 32, kernel_size=3, padding=1)
-            for shape in image_feature_shapes
-        ])
-        
-        # Global average pooling to reduce spatial dimensions
-        self.global_pool = nn.AdaptiveAvgPool2d(1)
-        
-        # Calculate the total size after convolutions and pooling
-        self.total_conv_features = 32 * len(image_feature_shapes)
-        
-        # Linear layer to combine convoluted image features and text features
-        self.feature_combiner = nn.Linear(self.total_conv_features + text_latent_dim, combined_latent_dim)
-        
-        # Flow layers
-        self.flow_layers = nn.ModuleList([
-            nn.Linear(combined_latent_dim, combined_latent_dim)
-            for _ in range(num_flow_layers - 1)
-        ])
-        
-        # Final layer to produce mu and logvar
-        self.final_layer = nn.Linear(combined_latent_dim, combined_latent_dim * 2)
-        
-        self.activation = nn.Tanh()
-
-    def forward(self, image_features, text_z):
-        # Apply convolutions to image features
-        conv_outputs = [self.global_pool(F.relu(conv(feat))).squeeze(-1).squeeze(-1) 
-                        for conv, feat in zip(self.conv_layers, image_features)]
-        
-        # Concatenate all convolved and pooled features
-        combined_image_features = torch.cat(conv_outputs, dim=1)
-        
-        # Concatenate with text features
-        combined_features = torch.cat([combined_image_features, text_z], dim=1)
-        
-        # Initial combination
-        x = F.relu(self.feature_combiner(combined_features))
-        
-        # Apply flow layers
-        for layer in self.flow_layers:
-            x = F.relu(layer(x))
-        
-        # Final layer to produce mu and logvar
-        x = self.final_layer(x)
-        
-        return self.activation(x)
 
 class ImageEmbeddingVAE(nn.Module):
-    def __init__(self, text_latent_dim=256,
-                  combined_latent_dim=256, 
-                  text_embedding_dim=768, 
-                  selected_layers=list(range(3, 14)),
-                  num_combiner_layers=1
-                  ):
+    def __init__(self, text_latent_dim=256, combined_latent_dim=256, text_embedding_dim=768, 
+                 selected_layers=list(range(3, 14)), num_combiner_layers=1):
         super(ImageEmbeddingVAE, self).__init__()
         self.mobilenet_encoder = MobileNetV2Encoder()
         self.image_encoder = ImageEncoder(self.mobilenet_encoder, selected_layers)
         self.text_encoder = TextEncoder(text_embedding_dim, text_latent_dim)
         
         with torch.no_grad():
-            dummy_input = torch.randn(1, 3, 224, 224)  # Assuming IMAGE_SIZE is 224
+            dummy_input = torch.randn(1, 3, 224, 224)
             image_feature_shapes = [f.shape[1:] for f in self.image_encoder(dummy_input)]
         
         self.combiner = ConvFlowCombiner(
@@ -479,41 +400,14 @@ class ImageEmbeddingVAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    # def forward(self, input_data):
-    #     image_features = self.image_encoder(input_data.image)
-    #     text_z = self.text_encoder(input_data.embedding)
-        
-    #     combined = self.combiner(image_features, text_z)
-    #     mu, logvar = torch.chunk(combined, 2, dim=1)
-        
-    #     latent = self.reparameterize(mu, logvar)
-        
-    #     reconstructed_image = self.image_decoder(latent)
-    #     reconstructed_embedding = self.text_decoder(latent)
-        
-        #     return ImageEmbeddingModelInput(image=reconstructed_image, embedding=reconstructed_embedding, filename=input_data.filename), latent, mu, logvar
     def forward(self, input_data):
-        # print(f" Input image shape: {input_data.image.shape}")
-        
         image_features = self.image_encoder(input_data.image)
-        # print(f"Encoded image features shapes: {[f.shape for f in image_features]}")
-        
         text_z = self.text_encoder(input_data.embedding)
-        # print(f"Encoded text shape: {text_z.shape}")
-        
         combined = self.combiner(image_features, text_z)
         mu, logvar = torch.chunk(combined, 2, dim=1)
-        # print(f"Mu shape: {mu.shape}, Logvar shape: {logvar.shape}")
-        
         latent = self.reparameterize(mu, logvar)
-        # print(f"Latent shape: {latent.shape}")
-        
         reconstructed_image = self.image_decoder(latent)
-        # print(f"Reconstructed image shape: {reconstructed_image.shape}")
-        
         reconstructed_embedding = self.text_decoder(latent)
-        # print(f"Reconstructed embedding shape: {reconstructed_embedding.shape}")
-        
         return ImageEmbeddingModelInput(image=reconstructed_image, embedding=reconstructed_embedding, filename=input_data.filename), latent, mu, logvar
 
     def encode(self, input_data: ImageEmbeddingModelInput):
@@ -527,7 +421,6 @@ class ImageEmbeddingVAE(nn.Module):
         reconstructed_image = self.image_decoder(latent)
         reconstructed_embedding = self.text_decoder(latent)
         return ImageEmbeddingModelInput(image=reconstructed_image, embedding=reconstructed_embedding, filename="generated.jpg")
-    
 
 # Example usage
 if __name__ == "__main__":
