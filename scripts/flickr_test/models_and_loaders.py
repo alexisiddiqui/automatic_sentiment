@@ -125,14 +125,12 @@ def collate_fn(batch):
     embeddings = torch.stack([item.embedding for item in batch])
     filenames = [item.filename for item in batch]
     return ImageEmbeddingModelInput(image=images, embedding=embeddings, filename=filenames)
-
 def create_dataloaders(
     image_dirs: List[str],
     csv_paths: Optional[List[str]] = None,
     batch_size: int = 32,
     num_workers: int = 4
 ) -> Tuple[DataLoader, DataLoader]:
-    
     if csv_paths is None:
         csv_paths = []
         for image_dir in image_dirs:
@@ -146,7 +144,19 @@ def create_dataloaders(
             raise ValueError("The number of CSV paths must match the number of image directories")
         csv_paths = [(csv_path, csv_path.replace('train', 'val')) for csv_path in csv_paths]
 
-    transform = transforms.Compose([
+    # Define separate transforms for training and validation
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop(IMAGE_SIZE),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+        transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        # transforms.RandomErasing(p=0.01)
+    ])
+
+    val_transform = transforms.Compose([
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -154,10 +164,9 @@ def create_dataloaders(
 
     train_datasets = []
     val_datasets = []
-
     for image_dir, (train_csv, val_csv) in zip(image_dirs, csv_paths):
-        train_datasets.append(ImageEmbeddingDataset(image_dir, train_csv, transform=transform))
-        val_datasets.append(ImageEmbeddingDataset(image_dir, val_csv, transform=transform))
+        train_datasets.append(ImageEmbeddingDataset(image_dir, train_csv, transform=train_transform))
+        val_datasets.append(ImageEmbeddingDataset(image_dir, val_csv, transform=val_transform))
 
     combined_train_dataset = ConcatDataset(train_datasets)
     combined_val_dataset = ConcatDataset(val_datasets)
@@ -181,6 +190,7 @@ def create_dataloaders(
     )
 
     return train_loader, val_loader
+
 
 # Usage example:
 # image_dirs = ["/path/to/image/dir1", "/path/to/image/dir2", "/path/to/image/dir3"]
