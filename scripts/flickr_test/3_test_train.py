@@ -234,13 +234,17 @@ def train_autoencoder(model: ImageEmbeddingVAE,
 if __name__ == "__main__":
     print("Starting main program")
 
+
+
     flickr_image_dir = os.getcwd()+"/data/flickr30k_images/flickr30k_images"
     celeba_image_dir = os.getcwd()+"/data/img_align_celeba/img_align_celeba"
     wikiart_image_dir = os.getcwd()+"/data/wiki-art/wiki-art"
     image_dirs = [flickr_image_dir, celeba_image_dir, wikiart_image_dir]
+    # setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
     print("Creating data loaders...")
-    train_loader, val_loader = create_dataloaders(image_dirs, batch_size=100, num_workers=8)
+    train_loader, val_loader = create_dataloaders(image_dirs, batch_size=100, num_workers=4)
 
     print("Initializing model...")
     model = ImageEmbeddingVAE(
@@ -283,8 +287,8 @@ if __name__ == "__main__":
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=5,
-        learning_rate=1e-4,
+        num_epochs=4,
+        learning_rate=1e-3,
         device='cuda'
     )
 

@@ -337,37 +337,96 @@ class ConvFlowCombiner(nn.Module):
         x = self.final_layer(x)
         return self.activation(x)
 
+# class ImprovedImageDecoder(nn.Module):
+#     def __init__(self, latent_dim, num_channels=3):
+#         super(ImprovedImageDecoder, self).__init__()
+#         self.fc = nn.Linear(latent_dim, 512 * 7 * 7)
+#         self.upsample_blocks = nn.ModuleList([
+#             self._make_upsample_block(512, 256),
+#             self._make_upsample_block(256, 128),
+#             self._make_upsample_block(128, 64),
+#             self._make_upsample_block(64, 32)
+#         ])
+#         self.final_conv = nn.Conv2d(32, num_channels, kernel_size=3, padding=1)
+#         self.upsample = nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
+#         self.lrelu = nn.LeakyReLU(0.2, inplace=True)
+#         self.dropout = nn.Dropout(0.2)  # Added dropout
+
+#     def _make_upsample_block(self, in_channels, out_channels):
+#         return nn.Sequential(
+#             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
+#             nn.BatchNorm2d(out_channels),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             nn.Dropout(0.2)  # Added dropout to each upsample block
+#         )
+
+#     def forward(self, x):
+#         x = self.dropout(self.fc(x))  # Applied dropout
+#         x = x.view(x.size(0), 512, 7, 7)
+#         for block in self.upsample_blocks:
+#             x = block(x)
+#         x = self.final_conv(x)
+#         x = self.upsample(x)
+#         return torch.tanh(x)
+
 class ImprovedImageDecoder(nn.Module):
     def __init__(self, latent_dim, num_channels=3):
         super(ImprovedImageDecoder, self).__init__()
-        self.fc = nn.Linear(latent_dim, 512 * 7 * 7)
+        
+        self.initial_features = 256
+        self.fc = nn.Linear(latent_dim, self.initial_features * 7 * 7)
+        
         self.upsample_blocks = nn.ModuleList([
-            self._make_upsample_block(512, 256),
-            self._make_upsample_block(256, 128),
-            self._make_upsample_block(128, 64),
-            self._make_upsample_block(64, 32)
+            self._make_upsample_block(self.initial_features, self.initial_features // 2),
+            self._make_upsample_block(self.initial_features // 2, self.initial_features // 4),
+            self._make_upsample_block(self.initial_features // 4, self.initial_features // 8),
+            self._make_upsample_block(self.initial_features // 8, self.initial_features // 16)
         ])
-        self.final_conv = nn.Conv2d(32, num_channels, kernel_size=3, padding=1)
+        
+        self.residual_blocks = nn.ModuleList([
+            self._make_residual_block(self.initial_features // 16)
+            for _ in range(2)
+        ])
+        
+        self.final_conv = nn.Conv2d(self.initial_features // 16, num_channels, kernel_size=3, padding=1)
         self.upsample = nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
-        self.lrelu = nn.LeakyReLU(0.2, inplace=True)
-        self.dropout = nn.Dropout(0.2)  # Added dropout
-
+        self.activation = nn.LeakyReLU(0.2)  # Removed inplace=True
+        self.dropout = nn.Dropout(0.1)
+        
     def _make_upsample_block(self, in_channels, out_channels):
         return nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.2)  # Added dropout to each upsample block
+            nn.LeakyReLU(0.2),  # Removed inplace=True
+            nn.Dropout(0.1)
+        )
+    
+    def _make_residual_block(self, channels):
+        return nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.LeakyReLU(0.2),  # Removed inplace=True
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.LeakyReLU(0.2)  # Removed inplace=True
         )
 
     def forward(self, x):
-        x = self.dropout(self.fc(x))  # Applied dropout
-        x = x.view(x.size(0), 512, 7, 7)
+        x = self.dropout(self.activation(self.fc(x)))
+        x = x.view(x.size(0), self.initial_features, 7, 7)
+        
         for block in self.upsample_blocks:
             x = block(x)
+        
+        for residual_block in self.residual_blocks:
+            residual = x
+            x = residual_block(x)
+            x = x + residual  # Changed from += to +
+        
         x = self.final_conv(x)
         x = self.upsample(x)
         return torch.tanh(x)
+    
 
 class TextDecoder(nn.Module):
     def __init__(self, latent_dim, output_dim):
@@ -382,7 +441,7 @@ class TextDecoder(nn.Module):
 
 class ImageEmbeddingVAE(nn.Module):
     def __init__(self, text_latent_dim=256, combined_latent_dim=256, text_embedding_dim=768, 
-                 selected_layers=list(range(3, 14)), num_combiner_layers=1):
+                 selected_layers=list(range(1, 14, 2)), num_combiner_layers=1):
         super(ImageEmbeddingVAE, self).__init__()
         self.mobilenet_encoder = MobileNetV2Encoder()
         self.image_encoder = ImageEncoder(self.mobilenet_encoder, selected_layers)
